@@ -1,0 +1,84 @@
+﻿@page "/counter"
+
+@using System.IO;
+@using System.Diagnostics;
+@using Microsoft.ML;
+@using BlazorApp2ML.Model;
+
+@inject IFileReaderService fileReaderService
+<h1>Better title!</h1>
+
+Welcome to your new filestreaming app.
+<br />
+This demo reads a file without doing anything particular with it.
+<br />
+There are other demos in the menu.
+<br />
+<br />
+
+<input type="file" @ref=inputElement />
+<button @onclick=ReadFile class="btn btn-primary">Read file</button>
+<button @onclick=ClearFile class="btn btn-primary">Clear</button>
+
+<br />
+<textarea style="max-width: 100%;" cols="50" rows="20">@Output</textarea>
+@code {
+
+    ElementReference inputElement;
+
+    string Output { get; set; }
+
+    public async Task ClearFile()
+    {
+        await fileReaderService.CreateReference(inputElement).ClearValue();
+    }
+
+    public async Task ReadFile()
+    {
+        Output = string.Empty;
+        this.StateHasChanged();
+        var nl = Environment.NewLine;
+        var files = (await fileReaderService.CreateReference(inputElement).EnumerateFilesAsync()).ToList();
+        foreach (var file in files)
+        {
+            var fileInfo = await file.ReadFileInfoAsync();
+
+            Output += $"{nameof(IFileInfo)}.{nameof(fileInfo.Name)}: {fileInfo.Name}{nl}";
+            Output += $"{nameof(IFileInfo)}.{nameof(fileInfo.Size)}: {fileInfo.Size}{nl}";
+            Output += $"{nameof(IFileInfo)}.{nameof(fileInfo.Type)}: {fileInfo.Type}{nl}";
+            Output += $"{nameof(IFileInfo)}.{nameof(fileInfo.LastModifiedDate)}: {fileInfo.LastModifiedDate?.ToString() ?? "(N/A)"}{nl}";
+            Output += $"Reading file...";
+            this.StateHasChanged();
+            Console.WriteLine(Output);
+
+            using (var fs = await file.OpenReadAsync())
+            {
+                var buffer = new byte[256];
+                if ((await fs.ReadAsync(buffer, 0, buffer.Length)) != 0)
+                {
+                    System.Text.StringBuilder builder = new System.Text.StringBuilder();
+
+                    foreach (byte value in buffer)
+                    {
+                        builder.Append((char)(48 + (value & 0x3f)));
+                    }
+
+                    string dataString = builder.ToString();
+
+                    ModelInput sampleData = new ModelInput()
+                    {
+                        Data = builder.ToString()
+                    };
+
+                    ModelOutput predictionResult = ConsumeModel.Predict(sampleData);
+
+                    Output += predictionResult.Prediction;
+
+                }
+
+            }
+            this.StateHasChanged();
+        }
+
+    }
+}
